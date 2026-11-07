@@ -1202,12 +1202,17 @@ void hc_capture_render(struct hc_capture *cap)
 	}
 
 	if (t->tex) {
+		// Textures imported from dma-bufs have a plain (non-sRGB) format, so
+		// gs_effect_set_texture_srgb() does not decode them. Decode in the
+		// shader when OBS renders in linear space; otherwise pass the
+		// sRGB-encoded pixels through untouched.
 		gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_OPAQUE);
+		const bool linear_srgb = gs_get_linear_srgb();
 		const bool previous_srgb = gs_framebuffer_srgb_enabled();
-		gs_enable_framebuffer_srgb(true);
+		gs_enable_framebuffer_srgb(linear_srgb);
 		gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
-		gs_effect_set_texture_srgb(image, t->tex);
-		while (gs_effect_loop(effect, "Draw"))
+		gs_effect_set_texture(image, t->tex);
+		while (gs_effect_loop(effect, linear_srgb ? "DrawSrgbDecompress" : "Draw"))
 			gs_draw_sprite(t->tex, 0, cap->width, cap->height);
 		gs_enable_framebuffer_srgb(previous_srgb);
 	}
